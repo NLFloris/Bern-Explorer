@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Entdecke Bern</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #F7F3EC;
+    --forest: #1B3A2D;
+    --forest-mid: #2D5A45;
+    --rust: #B5451B;
+    --rust-light: #D4602A;
+    --gold: #C8963C;
+    --charcoal: #2C2C2C;
+    --gray: #8A8A8A;
+    --light-gray: #E8E2D9;
+    --visited-green: #2A7D4F;
+    --tier-must: #8B1A1A;
+    --tier-rec: #2C5282;
+    --safe-bottom: env(safe-area-inset-bottom, 20px);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; font-family:'DM Sans',sans-serif; background:var(--forest); color:var(--charcoal); }
+
+  /* HEADER */
+  #header { position:fixed; top:0; left:0; right:0; z-index:1000; padding:env(safe-area-inset-top,12px) 0 0; pointer-events:none; }
+  .header-inner { background:var(--forest); border-radius:0 0 20px 20px; padding:14px 20px 16px; pointer-events:all; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .header-title { font-family:'Cormorant Garamond',serif; font-size:22px; font-weight:600; color:var(--cream); flex-shrink:0; }
+  .header-title span { color:var(--gold); }
+  .progress-wrap { flex:1; display:flex; flex-direction:column; align-items:flex-end; gap:5px; }
+  .progress-label { font-size:11px; font-weight:500; color:rgba(247,243,236,0.6); letter-spacing:0.5px; text-transform:uppercase; }
+  .progress-bar-outer { width:120px; height:6px; background:rgba(255,255,255,0.15); border-radius:3px; overflow:hidden; }
+  .progress-bar-inner { height:100%; background:linear-gradient(90deg,var(--gold),var(--rust-light)); border-radius:3px; transition:width 0.5s cubic-bezier(0.4,0,0.2,1); }
+
+  /* FILTER PANEL */
+  #filters { position:fixed; top:calc(env(safe-area-inset-top,12px) + 78px); left:0; right:0; z-index:999; pointer-events:none; }
+  .filter-panel { pointer-events:all; padding:8px 14px 6px; display:flex; flex-direction:column; gap:6px; }
+  .filter-row { display:flex; align-items:center; gap:6px; }
+  .filter-label { font-size:10px; font-weight:600; letter-spacing:0.8px; text-transform:uppercase; color:rgba(247,243,236,0.7); width:36px; flex-shrink:0; }
+  .seg-group { display:flex; gap:4px; flex-wrap:wrap; }
+  .seg {
+    flex-shrink:0; background:rgba(247,243,236,0.88); backdrop-filter:blur(14px);
+    border:1.5px solid transparent; border-radius:16px; padding:5px 11px;
+    font-size:11px; font-weight:500; color:var(--charcoal); cursor:pointer;
+    transition:all 0.18s; white-space:nowrap; line-height:1.2;
+  }
+  .seg.active { color:#fff; border-color:transparent; }
+  /* tier colours */
+  .seg.t-all.active  { background:var(--forest); border-color:var(--gold); }
+  .seg.t-must.active { background:#9B2C2C; }
+  .seg.t-rec.active  { background:#2A4365; }
+  .seg.t-good.active { background:#4A5568; }
+  /* cost colours */
+  .seg.c-all.active  { background:var(--forest); border-color:var(--gold); }
+  .seg.c-free.active { background:var(--visited-green); }
+  .seg.c-paid.active { background:var(--rust); }
+  /* status colours */
+  .seg.s-all.active     { background:var(--forest); border-color:var(--gold); }
+  .seg.s-unseen.active  { background:#744210; }
+  .seg.s-visited.active { background:var(--visited-green); }
+
+  /* SMART BANNER */
+  #smart-banner { position:fixed; top:calc(env(safe-area-inset-top,12px) + 158px); left:16px; right:16px; z-index:998; background:linear-gradient(135deg,#744210,#92400E); border-radius:14px; padding:12px 16px; display:none; align-items:center; gap:10px; box-shadow:0 4px 20px rgba(0,0,0,0.3); }
+  /* SHEET CLOSE BUTTON */
+  .sheet-close { position:absolute; top:14px; right:16px; width:30px; height:30px; border-radius:50%; background:var(--light-gray); border:none; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--gray); transition:all 0.15s; z-index:10; }
+  .sheet-close:active { transform:scale(0.9); background:#ddd; }
+  #smart-banner.show { display:flex; animation:slideDown 0.35s cubic-bezier(0.32,0.72,0,1); }
+  @keyframes slideDown { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+  .b-icon { font-size:22px; flex-shrink:0; }
+  .b-text { flex:1; }
+  .b-title { font-size:13px; font-weight:600; color:#FEF3C7; }
+  .b-sub { font-size:11px; color:rgba(254,243,199,0.7); margin-top:2px; }
+  .b-btn { background:rgba(255,255,255,0.2); border:none; border-radius:8px; padding:6px 10px; font-size:11px; font-weight:600; color:#FEF3C7; cursor:pointer; white-space:nowrap; }
+  .b-close { background:none; border:none; color:rgba(254,243,199,0.6); font-size:16px; cursor:pointer; padding:0 0 0 4px; }
+
+  /* MAP */
+  #map { position:fixed; inset:0; z-index:1; }
+  .leaflet-control-zoom,.leaflet-control-attribution { display:none; }
+
+  /* MARKERS */
+  .marker-wrap { display:flex; flex-direction:column; align-items:center; cursor:pointer; }
+  .marker-pin { width:38px; height:38px; border-radius:50% 50% 50% 4px; transform:rotate(-45deg); display:flex; align-items:center; justify-content:center; box-shadow:0 3px 12px rgba(0,0,0,0.32); border:2.5px solid white; transition:transform 0.2s,opacity 0.2s; }
+  .marker-pin .pin-icon { transform:rotate(45deg); font-size:15px; line-height:1; }
+  .marker-pin.free { background:var(--forest-mid); }
+  .marker-pin.paid { background:var(--rust); }
+  .marker-pin.visited { background:var(--visited-green); opacity:0.72; }
+  .marker-pin.selected { transform:rotate(-45deg) scale(1.3); z-index:999; opacity:1 !important; }
+  .marker-tier { width:14px; height:14px; border-radius:50%; border:2px solid white; margin-top:-4px; position:relative; z-index:1; }
+  .marker-tier.must { background:#C53030; }
+  .marker-tier.rec { background:#2B6CB0; }
+  .marker-tier.good { background:#718096; }
+
+  /* LEGEND */
+  .legend { position:fixed; left:16px; bottom:calc(var(--safe-bottom) + 100px); z-index:998; background:rgba(247,243,236,0.92); backdrop-filter:blur(12px); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:5px; }
+  .legend-item { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:500; color:var(--charcoal); }
+  .legend-dot { width:10px; height:10px; border-radius:50%; }
+  .ldot-must { background:#C53030; }
+  .ldot-rec { background:#2B6CB0; }
+  .ldot-good { background:#718096; }
+  .ldot-vis { background:var(--visited-green); }
+
+  /* LOCATE */
+  #locate-btn { position:fixed; right:20px; bottom:calc(var(--safe-bottom) + 100px); z-index:998; width:48px; height:48px; border-radius:50%; background:var(--white,#fff); box-shadow:0 4px 20px rgba(0,0,0,0.2); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:20px; transition:transform 0.15s; }
+  #locate-btn:active { transform:scale(0.92); }
+
+  /* TAB BAR */
+  #tab-bar { position:fixed; bottom:0; left:0; right:0; z-index:1000; background:var(--forest); padding:10px 20px calc(var(--safe-bottom) + 6px); display:flex; gap:4px; }
+  .tab-btn { flex:1; background:none; border:none; padding:8px 4px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:4px; color:rgba(247,243,236,0.45); transition:color 0.2s; }
+  .tab-btn.active { color:var(--gold); }
+  .tab-icon { font-size:20px; line-height:1; }
+  .tab-label { font-size:10px; font-weight:500; letter-spacing:0.4px; text-transform:uppercase; }
+
+  /* BOTTOM SHEET */
+  #bottom-sheet { position:fixed; left:0; right:0; bottom:0; z-index:1001; transform:translateY(100%); transition:transform 0.4s cubic-bezier(0.32,0.72,0,1); }
+  #bottom-sheet.open { transform:translateY(0); }
+  .sheet-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0); z-index:-1; transition:background 0.4s; pointer-events:none; }
+  #bottom-sheet.open .sheet-backdrop { background:rgba(0,0,0,0.3); pointer-events:all; }
+  .sheet-card { background:var(--cream); border-radius:24px 24px 0 0; padding:0 0 calc(var(--safe-bottom) + 90px); max-height:76vh; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .sheet-handle { display:flex; justify-content:center; padding:12px; }
+  .sheet-handle::after { content:''; width:36px; height:4px; background:var(--light-gray); border-radius:2px; }
+  .sheet-header { padding:0 20px 14px; display:flex; align-items:flex-start; gap:12px; }
+  .sheet-icon-wrap { width:52px; height:52px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; }
+  .sheet-icon-wrap.free { background:rgba(45,90,69,0.12); }
+  .sheet-icon-wrap.paid { background:rgba(181,69,27,0.1); }
+  .sheet-name { font-family:'Cormorant Garamond',serif; font-size:22px; font-weight:600; color:var(--charcoal); line-height:1.2; margin-bottom:5px; }
+  .sheet-meta { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .sheet-cat { font-size:12px; font-weight:500; color:var(--gray); text-transform:uppercase; letter-spacing:0.5px; }
+  .tier-badge { display:inline-flex; align-items:center; font-size:10px; font-weight:700; padding:2px 7px; border-radius:8px; text-transform:uppercase; letter-spacing:0.5px; }
+  .tier-badge.must { background:rgba(197,48,48,0.12); color:#C53030; }
+  .tier-badge.rec { background:rgba(43,108,176,0.12); color:#2B6CB0; }
+  .tier-badge.good { background:rgba(113,128,150,0.12); color:#718096; }
+  .sheet-rating { display:inline-flex; align-items:center; gap:4px; background:rgba(200,150,60,0.12); border-radius:20px; padding:4px 10px; font-size:13px; font-weight:600; color:var(--gold); margin:0 20px 14px; }
+  .sheet-divider { height:1px; background:var(--light-gray); margin:0 20px 12px; }
+  .sheet-row { display:flex; align-items:center; gap:10px; padding:0 20px; margin-bottom:10px; }
+  .row-icon { font-size:16px; width:22px; text-align:center; flex-shrink:0; }
+  .row-text { font-size:14px; color:var(--charcoal); line-height:1.4; }
+  .cost-free { color:var(--visited-green); font-weight:600; }
+  .cost-paid { color:var(--rust); font-weight:600; }
+  .sheet-desc { padding:0 20px; font-size:14px; color:#555; line-height:1.65; margin-bottom:18px; }
+
+  /* ACTION BUTTONS */
+  .action-row { display:flex; gap:10px; padding:0 20px; margin-bottom:8px; }
+  .visit-btn { flex:1; padding:14px; border-radius:14px; border:none; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600; cursor:pointer; transition:all 0.25s; display:flex; align-items:center; justify-content:center; gap:7px; }
+  .visit-btn.not-visited { background:var(--forest); color:var(--cream); }
+  .visit-btn.visited-state { background:rgba(42,125,79,0.12); color:var(--visited-green); border:1.5px solid rgba(42,125,79,0.25); }
+  .visit-btn:active { transform:scale(0.97); }
+  .nav-btn { flex-shrink:0; width:50px; height:50px; border-radius:14px; border:none; background:rgba(200,150,60,0.12); color:var(--gold); font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; }
+  .nav-btn:active { transform:scale(0.93); background:rgba(200,150,60,0.22); }
+
+  /* NAV PICKER */
+  #nav-picker { position:fixed; inset:0; z-index:2000; display:none; align-items:flex-end; justify-content:center; }
+  #nav-picker.open { display:flex; }
+  .nav-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.5); }
+  .nav-card { position:relative; width:100%; max-width:420px; background:var(--cream); border-radius:24px 24px 0 0; padding:0 0 calc(var(--safe-bottom) + 16px); z-index:1; animation:slideUp 0.3s cubic-bezier(0.32,0.72,0,1); }
+  @keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+  .nav-handle { display:flex; justify-content:center; padding:12px; }
+  .nav-handle::after { content:''; width:36px; height:4px; background:var(--light-gray); border-radius:2px; }
+  .nav-title { font-family:'Cormorant Garamond',serif; font-size:20px; font-weight:600; color:var(--charcoal); padding:0 20px 16px; text-align:center; }
+  .nav-option { display:flex; align-items:center; gap:14px; padding:15px 20px; cursor:pointer; transition:background 0.15s; border-bottom:1px solid var(--light-gray); }
+  .nav-option:last-child { border-bottom:none; }
+  .nav-option:active { background:var(--light-gray); }
+  .nav-opt-icon { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; }
+  .nav-opt-label { font-size:16px; font-weight:500; color:var(--charcoal); }
+  .nav-opt-sub { font-size:12px; color:var(--gray); margin-top:2px; }
+
+  /* LIST VIEW */
+  #list-view { position:fixed; inset:0; z-index:999; background:var(--cream); transform:translateX(100%); transition:transform 0.35s cubic-bezier(0.32,0.72,0,1); overflow-y:auto; -webkit-overflow-scrolling:touch; padding-top:calc(env(safe-area-inset-top,12px) + 78px); padding-bottom:calc(var(--safe-bottom) + 80px); }
+  #list-view.open { transform:translateX(0); }
+  .list-section-title { font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:var(--gray); padding:20px 20px 8px; }
+  .list-item { display:flex; align-items:center; gap:14px; padding:13px 20px; cursor:pointer; transition:background 0.15s; border-bottom:1px solid var(--light-gray); }
+  .list-item:active { background:var(--light-gray); }
+  .list-icon { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; position:relative; }
+  .list-icon.free { background:rgba(45,90,69,0.1); }
+  .list-icon.paid { background:rgba(181,69,27,0.1); }
+  .list-icon.vis-bg { background:rgba(42,125,79,0.1); }
+  .list-tier-dot { position:absolute; bottom:2px; right:2px; width:10px; height:10px; border-radius:50%; border:1.5px solid white; }
+  .list-tier-dot.must { background:#C53030; }
+  .list-tier-dot.rec { background:#2B6CB0; }
+  .list-tier-dot.good { background:#718096; }
+  .list-info { flex:1; }
+  .list-name { font-size:15px; font-weight:500; color:var(--charcoal); margin-bottom:2px; }
+  .list-meta { font-size:12px; color:var(--gray); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .lc-free { color:var(--visited-green); font-weight:500; }
+  .lc-paid { color:var(--rust); font-weight:500; }
+  .list-check { width:24px; height:24px; border-radius:50%; border:2px solid var(--light-gray); display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; transition:all 0.2s; }
+  .list-check.done { background:var(--visited-green); border-color:var(--visited-green); color:white; }
+
+  /* STATS VIEW */
+  #stats-view { position:fixed; inset:0; z-index:999; background:var(--forest); transform:translateX(100%); transition:transform 0.35s cubic-bezier(0.32,0.72,0,1); overflow-y:auto; -webkit-overflow-scrolling:touch; padding-top:calc(env(safe-area-inset-top,12px) + 78px); padding-bottom:calc(var(--safe-bottom) + 80px); }
+  #stats-view.open { transform:translateX(0); }
+  .stats-hero { padding:28px 24px 20px; text-align:center; }
+  .stats-circle { width:140px; height:140px; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; margin:0 auto 20px; position:relative; }
+  .stats-circle-svg { position:absolute; inset:-6px; border-radius:50%; }
+  .stats-number { font-family:'Cormorant Garamond',serif; font-size:52px; font-weight:700; color:var(--gold); line-height:1; }
+  .stats-sub { font-size:12px; color:rgba(247,243,236,0.5); text-transform:uppercase; letter-spacing:0.8px; }
+  .stats-tagline { font-family:'Cormorant Garamond',serif; font-size:20px; color:var(--cream); font-weight:400; font-style:italic; }
+  .tier-cards { display:flex; gap:10px; padding:0 20px 16px; }
+  .tier-card { flex:1; border-radius:16px; padding:14px 12px; border:1px solid rgba(255,255,255,0.1); }
+  .tc-must { background:rgba(197,48,48,0.18); }
+  .tc-rec { background:rgba(43,108,176,0.18); }
+  .tc-good { background:rgba(113,128,150,0.18); }
+  .tc-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px; }
+  .tc-must .tc-label { color:#FC8181; }
+  .tc-rec .tc-label { color:#63B3ED; }
+  .tc-good .tc-label { color:#A0AEC0; }
+  .tc-val { font-family:'Cormorant Garamond',serif; font-size:28px; font-weight:600; color:var(--cream); line-height:1; }
+  .tc-total { font-size:11px; color:rgba(247,243,236,0.4); margin-top:1px; }
+  .stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:0 20px 20px; }
+  .stat-card { background:rgba(255,255,255,0.07); border-radius:16px; padding:18px 16px; border:1px solid rgba(255,255,255,0.08); }
+  .stat-value { font-family:'Cormorant Garamond',serif; font-size:36px; font-weight:600; color:var(--cream); line-height:1; margin-bottom:4px; }
+  .stat-label { font-size:12px; color:rgba(247,243,236,0.5); text-transform:uppercase; letter-spacing:0.5px; }
+  .stats-section-title { font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:rgba(247,243,236,0.4); padding:0 20px 10px; }
+  .stats-place-item { display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid rgba(255,255,255,0.06); }
+  .spi-icon { font-size:20px; width:28px; text-align:center; }
+  .spi-name { flex:1; font-size:14px; color:var(--cream); opacity:0.85; }
+  .spi-badge { font-size:11px; font-weight:600; padding:3px 8px; border-radius:8px; background:rgba(42,125,79,0.25); color:#7DCEA0; }
+
+  /* User location */
+  .user-loc-dot { width:16px; height:16px; background:#4A9AFF; border:3px solid white; border-radius:50%; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(74,154,255,0.5)} 70%{box-shadow:0 0 0 12px rgba(74,154,255,0)} 100%{box-shadow:0 0 0 0 rgba(74,154,255,0)} }
+
+  /* Toast */
+  #toast { position:fixed; top:calc(env(safe-area-inset-top,12px) + 90px); left:50%; transform:translateX(-50%) translateY(-20px); background:var(--charcoal); color:var(--cream); padding:10px 18px; border-radius:20px; font-size:13px; font-weight:500; z-index:3000; opacity:0; transition:opacity 0.3s,transform 0.3s; pointer-events:none; white-space:nowrap; }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* Loading */
+  #loading { position:fixed; inset:0; background:var(--forest); z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; transition:opacity 0.5s; }
+  #loading.fade { opacity:0; pointer-events:none; }
+  .load-title { font-family:'Cormorant Garamond',serif; font-size:38px; font-weight:600; color:var(--cream); }
+  .load-title span { color:var(--gold); }
+  .load-sub { font-size:12px; color:rgba(247,243,236,0.4); letter-spacing:2.5px; text-transform:uppercase; }
+  .load-dots { display:flex; gap:6px; margin-top:8px; }
+  .load-dot { width:6px; height:6px; border-radius:50%; background:var(--gold); animation:bounce 1.4s infinite ease-in-out; }
+  .load-dot:nth-child(2){animation-delay:0.2s} .load-dot:nth-child(3){animation-delay:0.4s}
+  @keyframes bounce { 0%,80%,100%{transform:scale(0.5);opacity:0.4} 40%{transform:scale(1);opacity:1} }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="load-title">Entdecke <span>Bern</span></div>
+  <div class="load-sub">Your City Explorer</div>
+  <div class="load-dots"><div class="load-dot"></div><div class="load-dot"></div><div class="load-dot"></div></div>
+</div>
+
+<div id="header">
+  <div class="header-inner">
+    <div class="header-title">Entdecke <span>Bern</span></div>
+    <div class="progress-wrap">
+      <div class="progress-label"><span id="visited-count">0</span> / <span id="total-count">0</span> visited</div>
+      <div class="progress-bar-outer"><div class="progress-bar-inner" id="progress-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+</div>
+
+<div id="filters">
+  <div class="filter-panel">
+    <div class="filter-row">
+      <span class="filter-label">Tier</span>
+      <div class="seg-group">
+        <div class="seg t-all active"  onclick="setTier('all')">All</div>
+        <div class="seg t-must"        onclick="setTier('must')">⭐ Must-See</div>
+        <div class="seg t-rec"         onclick="setTier('rec')">👍 Recommended</div>
+        <div class="seg t-good"        onclick="setTier('good')">📍 Good</div>
+      </div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Cost</span>
+      <div class="seg-group">
+        <div class="seg c-all active" onclick="setCost('all')">All</div>
+        <div class="seg c-free"       onclick="setCost('free')">✨ Free</div>
+        <div class="seg c-paid"       onclick="setCost('paid')">💳 Paid</div>
+      </div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Status</span>
+      <div class="seg-group">
+        <div class="seg s-all active" onclick="setStatus('all')">All</div>
+        <div class="seg s-unseen"     onclick="setStatus('unseen')">📍 Not Visited</div>
+        <div class="seg s-visited"    onclick="setStatus('visited')">✓ Visited</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="smart-banner">
+  <span class="b-icon">🎉</span>
+  <div class="b-text">
+    <div class="b-title" id="b-title">All Must-Sees done!</div>
+    <div class="b-sub" id="b-sub">Ready to explore Recommended spots?</div>
+  </div>
+  <button class="b-btn" onclick="setTier('rec');hideBanner()">Show them</button>
+  <button class="b-close" onclick="hideBanner()">✕</button>
+</div>
+
+<div id="map"></div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot ldot-must"></div> Must-See (≥4.6)</div>
+  <div class="legend-item"><div class="legend-dot ldot-rec"></div> Recommended</div>
+  <div class="legend-item"><div class="legend-dot ldot-good"></div> Good</div>
+  <div class="legend-item"><div class="legend-dot ldot-vis"></div> Visited</div>
+</div>
+
+<button id="locate-btn" onclick="locateMe()">📍</button>
+<div id="toast"></div>
+
+<!-- Bottom Sheet -->
+<div id="bottom-sheet">
+  <div class="sheet-backdrop" onclick="closeSheet()"></div>
+  <div class="sheet-card" style="position:relative">
+    <button class="sheet-close" onclick="closeSheet()">✕</button>
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div class="sheet-icon-wrap free" id="s-icon-wrap"><span id="s-icon">🏛️</span></div>
+      <div style="flex:1">
+        <div class="sheet-name" id="s-name">Name</div>
+        <div class="sheet-meta">
+          <span class="sheet-cat" id="s-cat">Category</span>
+          <span class="tier-badge must" id="s-tier">Must-See</span>
+        </div>
+      </div>
+    </div>
+    <div class="sheet-rating" id="s-rating">⭐ 4.5</div>
+    <div class="sheet-divider"></div>
+    <div class="sheet-row"><span class="row-icon">💰</span><span class="row-text" id="s-cost">Free</span></div>
+    <div class="sheet-row"><span class="row-icon">🕐</span><span class="row-text" id="s-hours">Open 24 hours</span></div>
+    <div class="sheet-row"><span class="row-icon">📍</span><span class="row-text" id="s-addr">Address</span></div>
+    <div class="sheet-divider" style="margin-top:6px"></div>
+    <div class="sheet-desc" id="s-desc">Description</div>
+    <div class="action-row">
+      <button class="visit-btn not-visited" id="visit-btn" onclick="toggleVisited()">
+        <span id="v-icon">☐</span><span id="v-label">Mark as Visited</span>
+      </button>
+      <button class="nav-btn" onclick="openNavPicker()" title="Navigate">🧭</button>
+    </div>
+  </div>
+</div>
+
+<!-- Nav Picker -->
+<div id="nav-picker">
+  <div class="nav-backdrop" onclick="closeNavPicker()"></div>
+  <div class="nav-card">
+    <div class="nav-handle"></div>
+    <div class="nav-title">Navigate with…</div>
+    <div class="nav-option" onclick="navigateWith('apple')">
+      <div class="nav-opt-icon" style="background:#F0F0F5">🍎</div>
+      <div><div class="nav-opt-label">Apple Maps</div><div class="nav-opt-sub">Opens in Maps app</div></div>
+    </div>
+    <div class="nav-option" onclick="navigateWith('google')">
+      <div class="nav-opt-icon" style="background:#E8F5E9">🗺️</div>
+      <div><div class="nav-opt-label">Google Maps</div><div class="nav-opt-sub">Opens in Google Maps</div></div>
+    </div>
+    <div class="nav-option" onclick="navigateWith('waze')">
+      <div class="nav-opt-icon" style="background:#E3F2FD">🚗</div>
+      <div><div class="nav-opt-label">Waze</div><div class="nav-opt-sub">Opens in Waze</div></div>
+    </div>
+    <div class="nav-option" onclick="navigateWith('swiss')">
+      <div class="nav-opt-icon" style="background:#FFF8E1">🇨🇭</div>
+      <div><div class="nav-opt-label">Swiss National Map</div><div class="nav-opt-sub">map.geo.admin.ch (browser)</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- List View -->
+<div id="list-view"><div id="list-container"></div></div>
+
+<!-- Stats View -->
+<div id="stats-view">
+  <div class="stats-hero">
+    <div class="stats-circle">
+      <svg class="stats-circle-svg" viewBox="0 0 148 148">
+        <circle cx="74" cy="74" r="68" fill="none" stroke="rgba(200,150,60,0.15)" stroke-width="6"/>
+        <circle cx="74" cy="74" r="68" fill="none" stroke="#C8963C" stroke-width="6"
+          stroke-dasharray="427.26" stroke-dashoffset="427.26" stroke-linecap="round"
+          transform="rotate(-90 74 74)" id="circle-arc"
+          style="transition:stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1)"/>
+      </svg>
+      <div class="stats-number" id="st-pct">0%</div>
+      <div class="stats-sub">complete</div>
+    </div>
+    <div class="stats-tagline" id="st-tagline">Start your Bern adventure!</div>
+  </div>
+  <div class="tier-cards">
+    <div class="tier-card tc-must"><div class="tc-label">⭐ Must-See</div><div class="tc-val" id="tc-must-v">0</div><div class="tc-total" id="tc-must-t">/ 0 done</div></div>
+    <div class="tier-card tc-rec"><div class="tc-label">👍 Recommended</div><div class="tc-val" id="tc-rec-v">0</div><div class="tc-total" id="tc-rec-t">/ 0 done</div></div>
+    <div class="tier-card tc-good"><div class="tc-label">📍 Good</div><div class="tc-val" id="tc-good-v">0</div><div class="tc-total" id="tc-good-t">/ 0 done</div></div>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-value" id="st-visited">0</div><div class="stat-label">Visited</div></div>
+    <div class="stat-card"><div class="stat-value" id="st-remaining">0</div><div class="stat-label">To Explore</div></div>
+    <div class="stat-card"><div class="stat-value" id="st-free">0</div><div class="stat-label">Free Spots</div></div>
+    <div class="stat-card"><div class="stat-value" id="st-paid">0</div><div class="stat-label">Paid Entries</div></div>
+  </div>
+  <div class="stats-section-title">Visited Places</div>
+  <div id="st-visited-list"></div>
+</div>
+
+<div id="tab-bar">
+  <button class="tab-btn active" data-tab="map" onclick="switchTab('map')"><span class="tab-icon">🗺️</span><span class="tab-label">Map</span></button>
+  <button class="tab-btn" data-tab="list" onclick="switchTab('list')"><span class="tab-icon">📋</span><span class="tab-label">List</span></button>
+  <button class="tab-btn" data-tab="stats" onclick="switchTab('stats')"><span class="tab-icon">✨</span><span class="tab-label">Progress</span></button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const PLACES = [
+  {id:'zytglogge',name:'Zytglogge',category:'landmark',icon:'🕰️',lat:46.9480,lng:7.4478,cost:'free',costDetail:'Free to view · Guided tour CHF 20',rating:4.6,tier:'must',address:'Bim Zytglogge 1, 3011 Bern',hours:'Open 24h (exterior) · Tours by booking',desc:"Bern's iconic 13th-century clock tower and oldest monument. A magnificent astronomical clock performs mechanical puppet shows at the top of each hour. The bears, jesters, and golden rooster are unmissable. Book in advance for an interior tour showing the extraordinary clockwork mechanism."},
+  {id:'bearpark',name:'BearPark',category:'landmark',icon:'🐻',lat:46.9481,lng:7.4595,cost:'free',costDetail:'Completely free',rating:4.4,tier:'rec',address:'Grosser Muristalden 4, 3006 Bern',hours:'Open 24 hours',desc:"Bern means 'bear' and this is where the city's symbolic bears live in a natural riverside enclosure. The park hugs the Aare River and offers breathtaking panoramic views of the Old Town. A quintessential Bern experience, and completely free."},
+  {id:'rosengarten',name:'Rosengarten',category:'nature',icon:'🌹',lat:46.9515,lng:7.4601,cost:'free',costDetail:'Completely free',rating:4.7,tier:'must',address:'Alter Aargauerstalden 31B, 3006 Bern',hours:'Open 24 hours',desc:"One of the best viewpoints in Bern. Perched on a hill across the Aare, this rose garden has 200+ rose varieties and a stunning UNESCO World Heritage Old Town panorama. Einstein's favourite bench is here. Most beautiful in May–June."},
+  {id:'hist-museum',name:'Historisches Museum & Einstein Museum',category:'museum',icon:'🔭',lat:46.9431,lng:7.4493,cost:'paid',costDetail:'CHF 13–18 adults',rating:4.6,tier:'must',address:'Helvetiaplatz 5, 3005 Bern',hours:'Tue–Sun: 10:00–17:00 · Closed Monday',desc:"Bern's largest museum in a neo-Gothic castle. The Einstein Museum traces Albert Einstein's life with interactive exhibits — he developed the theory of relativity while living in Bern. The history collection spans four fascinating floors."},
+  {id:'nat-history',name:'Naturhistorisches Museum',category:'museum',icon:'🦴',lat:46.9421,lng:7.4489,cost:'paid',costDetail:'CHF 7–10 adults',rating:4.5,tier:'rec',address:'Bernastrasse 15, 3005 Bern',hours:'Tue–Sun: 9:00–17:00 (Wed until 18:00)',desc:"Switzerland's oldest natural history museum, home to the famous taxidermied St. Bernard dog Barry who saved 40+ alpine lives. Spectacular dioramas, fossils, and an extraordinary mineral collection. Great for families."},
+  {id:'kunstmuseum',name:'Kunstmuseum Bern',category:'museum',icon:'🎨',lat:46.9512,lng:7.4432,cost:'paid',costDetail:'CHF 10–22 adults',rating:4.4,tier:'rec',address:'Hodlerstrasse 8, 3011 Bern',hours:'Tue: 10:00–20:00 · Wed–Sun: 10:00–17:00',desc:"Switzerland's oldest art museum spanning 700 years of art — from medieval masters to Picasso, Klee, and Hodler. Scan QR codes for a free audio guide. The light-filled spaces feel genuinely designed for contemplation."},
+  {id:'comm-museum',name:'Museum of Communication',category:'museum',icon:'📡',lat:46.9418,lng:7.4500,cost:'paid',costDetail:'CHF 15 adults',rating:4.6,tier:'must',address:'Helvetiastrasse 16, 3000 Bern',hours:'Tue–Sun: 10:00–17:00 · Closed Monday',desc:"A surprisingly fun and deeply interactive museum tracing human communication from ancient letter shoots to the internet age. The dance section is extraordinary. Far bigger inside than it looks, packed with hands-on exhibits for all ages."},
+  {id:'paul-klee',name:'Zentrum Paul Klee',category:'museum',icon:'🌊',lat:46.9491,lng:7.4743,cost:'paid',costDetail:'CHF 20–22 adults',rating:4.4,tier:'rec',address:'Monument im Fruchtland 3, 3006 Bern',hours:'Tue–Sun: 10:00–17:00 · Closed Monday',desc:"A masterpiece of architecture by Renzo Piano — three undulating steel-and-glass hills rising from the landscape. Houses rotating selections from Paul Klee's 4,000-work collection. The building itself is worth the trip."},
+  {id:'alpine-museum',name:'Alpine Museum of Switzerland',category:'museum',icon:'⛰️',lat:46.9441,lng:7.4483,cost:'paid',costDetail:'CHF 14–16 adults',rating:4.0,tier:'good',address:'Helvetiaplatz 4, 3005 Bern',hours:'Tue–Sun: 10:00–17:00 · Closed Monday',desc:"Explores Switzerland's relationship with the Alps — mountaineering history, environmental awareness, and alpine culture. Rotating bold exhibitions. The café is accessible without a ticket and highly recommended."},
+  {id:'parliament',name:'Federal Parliament Building',category:'landmark',icon:'🏛️',lat:46.9466,lng:7.4443,cost:'free',costDetail:'Free guided tours available',rating:4.5,tier:'rec',address:'Bundesplatz 3, 3003 Bern',hours:'Mon–Sat: 9:00–16:00 (guided tours)',desc:"Switzerland's seat of democracy — a stunning neo-Renaissance palace built 1852–1902. Book a free guided tour to explore soaring marble halls and intricate frescoes. The Bundesplatz fountain show is free and spectacular on summer evenings."},
+  {id:'botanical',name:'Botanical Garden, Uni Bern',category:'nature',icon:'🌿',lat:46.9529,lng:7.4447,cost:'free',costDetail:'Completely free',rating:4.7,tier:'must',address:'Altenbergrain 21, 3013 Bern',hours:'Mon–Sun: 8:00–17:00',desc:"One of Bern's best-kept secrets. Terraced gardens cascade to the Aare, with medicinal herbs, rare plants, and a tropical greenhouse. All meticulously labelled. Locals picnic here — a tranquil escape from the Old Town crowds."},
+  {id:'gurten',name:'Gurten Park',category:'nature',icon:'🏔️',lat:46.9194,lng:7.4381,cost:'free',costDetail:'Park free · Funicular CHF 4–5',rating:4.7,tier:'must',address:'Gurtenkulm 10, 3084 Wabern bei Bern',hours:'Open 24 hours',desc:"Bern's local mountain — a hilltop park with sweeping views over the city and the Alps. Hike up or take the funicular (free with Bern Welcome card). In summer views stretch to the Bernese Oberland. Ferris wheel, toboggan runs, great food."},
+  {id:'kafigturm',name:'Käfigturm (Prison Tower)',category:'landmark',icon:'⚔️',lat:46.9482,lng:7.4439,cost:'free',costDetail:'Free to view',rating:4.5,tier:'rec',address:'Marktgasse 67, 3011 Bern',hours:'Mon: 14:00–18:00 · Tue–Fri: 10:00–18:00 · Sat: 10:00–16:00',desc:"Built in 1256, this tower served as city gate, prison, and treasury. Now hosts political exhibitions on Swiss democracy. Ancient stone walls and prison cells are open to explore. Every Fastnacht, a carnival bear is freed from its cage."},
+  {id:'kindlifresser',name:'Kindlifresserbrunnen',category:'landmark',icon:'😱',lat:46.9485,lng:7.4475,cost:'free',costDetail:'Free (public fountain)',rating:4.5,tier:'rec',address:'Kornhausplatz 18, 3011 Bern',hours:'Open 24 hours',desc:"The 'Child-Eater Fountain' — a 16th-century ogre devouring a naked child, with a bag of more children at his side. One of Bern's most bizarre landmarks. Nobody knows its original meaning. A guaranteed talking point on any Bern visit."},
+  {id:'gerechtigkeitsgasse',name:'Gerechtigkeitsgasse',category:'landmark',icon:'⚖️',lat:46.9482,lng:7.4538,cost:'free',costDetail:'Free (public street)',rating:4.8,tier:'must',address:'Gerechtigkeitsgasse, 3011 Bern',hours:'Open 24 hours',desc:"The most beautiful street in Bern's UNESCO Old Town. Home to the 16th-century Fountain of Justice — the only original Bernese fountain preserved intact. Lady Justice stands blindfolded over a Holy Roman Emperor, Pope, Sultan, and Mayor."},
+
+  // 10 NEW PLACES
+  {id:'cathedral',name:'Bern Cathedral (Berner Münster)',category:'landmark',icon:'⛪',lat:46.9472,lng:7.4515,cost:'free',costDetail:'Free entry · Tower climb CHF 6',rating:4.6,tier:'must',address:'Münsterplatz 1, 3000 Bern',hours:'Mon–Fri: 12:00–17:00 · Sat: 10:00–17:00 · Sun: 11:30–17:00',desc:"Switzerland's tallest Gothic cathedral, begun in 1421 and completed only in 1893. Climb 344 steps to the 100m tower for a breathtaking 360° panorama of the Old Town, Alps, and Aare River. The Dance of Death stained-glass window inside is absolutely unforgettable."},
+  {id:'einstein-house',name:'Einstein House',category:'landmark',icon:'🧠',lat:46.9478,lng:7.4500,cost:'paid',costDetail:'CHF 6 adults',rating:4.0,tier:'good',address:'Kramgasse 49, 3011 Bern',hours:'Mon–Sun: 10:00–17:00',desc:"The apartment where Albert Einstein lived 1903–1905, the very years he developed his revolutionary theories including Special Relativity. Small and intimate — the preserved rooms offer a moving sense of genius at work in ordinary surroundings. Right on the popular Kramgasse shopping street."},
+  {id:'nydeggbruecke',name:'Nydeggbrücke',category:'landmark',icon:'🌉',lat:46.9485,lng:7.4585,cost:'free',costDetail:'Free (public bridge)',rating:4.8,tier:'must',address:'Nydeggbrücke, 3013 Bern',hours:'Open 24 hours',desc:"The historic 19th-century freestone bridge over the Aare built 1840–1844, connecting the Old City with newer districts. One of the most picturesque viewpoints in Bern. In summer, watch locals swim downstream through the Aare — a beloved Bernese tradition."},
+  {id:'nydeggkirche',name:'Nydeggkirche',category:'landmark',icon:'🕍',lat:46.9488,lng:7.4574,cost:'free',costDetail:'Free entry',rating:4.5,tier:'rec',address:'Nydegghof 2, 3011 Bern',hours:'Hours vary — check seasonally',desc:"One of Bern's oldest churches, dating to the 14th century, built on the foundations of the original Zähringer fortress where the city began. Tucked right at the end of the Nydegg Bridge with lovely Aare views. Peaceful, quiet, and historically profound."},
+  {id:'holy-spirit',name:'Church of the Holy Spirit',category:'landmark',icon:'🕊️',lat:46.9479,lng:7.4408,cost:'free',costDetail:'Free entry',rating:4.5,tier:'rec',address:'Spitalgasse 44, 3011 Bern',hours:'Tue–Fri: 11:00–18:30 · Sun: 13:00–17:00',desc:"Bern's finest Baroque church built in 1729, with a magnificent free-standing pulpit emphasising the Protestant tradition. Enormous from the outside. Unexpectedly serene inside, located right in the middle of the busy main shopping street."},
+  {id:'zahringerbrunnen',name:'Zähringerbrunnen',category:'landmark',icon:'🐻‍❄️',lat:46.9480,lng:7.4492,cost:'free',costDetail:'Free (public fountain)',rating:4.7,tier:'must',address:'Kramgasse, 3011 Bern',hours:'Open 24 hours',desc:"A stunning 16th-century fountain depicting an armoured bear — symbolising city founder Berchtold von Zähringen who shot a bear on the Aare peninsula and named the city Bern after it. One of eleven iconic figure fountains on the Old Town trail. A spectacular photo opportunity."},
+  {id:'pfeiferbrunnen',name:'Pfeiferbrunnen',category:'landmark',icon:'🎵',lat:46.9480,lng:7.4423,cost:'free',costDetail:'Free (public fountain)',rating:4.7,tier:'must',address:'Spitalgasse, 3011 Bern',hours:'Open 24 hours',desc:"The first of Bern's eleven legendary 16th-century figure fountains — a brilliantly colourful statue of a man playing bagpipes by master sculptor Hans Gieng. Stands right on Spitalgasse shopping street. The perfect starting point for a self-guided fountain trail through the Old Town."},
+  {id:'mosesbrunnen',name:'Mosesbrunnen',category:'landmark',icon:'📜',lat:46.9474,lng:7.4506,cost:'free',costDetail:'Free (public fountain)',rating:4.5,tier:'rec',address:'Münsterplatz, 3011 Bern',hours:'Open 24 hours',desc:"Directly in front of the Cathedral on Münsterplatz, this beautiful 16th-century fountain depicts Moses delivering the Ten Commandments. He is portrayed with rays of light emanating from his head — a detail from the Book of Exodus. One of the finest in Bern's fountain collection."},
+  {id:'vennerbrunnen',name:'Vennerbrunnen',category:'landmark',icon:'🛡️',lat:46.9484,lng:7.4524,cost:'free',costDetail:'Free (public fountain)',rating:4.6,tier:'must',address:'Kreuzgasse, 3011 Bern',hours:'Open 24 hours',desc:"Opposite the historic Town Hall, this 16th-century fountain depicts a Venner — a powerful medieval military-political figure of Bern — in full armour holding the city banner. Ninth of the eleven Old Town fountains trail. The water is still drinkable from the base tap."},
+  {id:'aare-viewpoint',name:'Aare Viewpoint (Old Town)',category:'nature',icon:'🌄',lat:46.9472,lng:7.4595,cost:'free',costDetail:'Free',rating:4.8,tier:'must',address:'Grosser Muristalden, 3006 Bern',hours:'Open 24 hours',desc:"The most dramatic viewpoint of Bern's famous oxbow — the Aare River wrapping almost entirely around the medieval peninsula. See the terracotta rooftops, the Cathedral spire, and the green river in one sweeping panorama. Best at golden hour. Completely free, and steps from the BearPark."},
+];
+
+let visited = new Set();
+let filterTier = 'all';
+let filterCost = 'all';
+let filterStatus = 'all';
+let currentPlaceId = null;
+let markers = {};
+let map, userMarker;
+let currentNavPlace = null;
+let bannerDismissed = false;
+
+async function saveVisited() {
+  try { await window.storage.set('bern-v3', JSON.stringify([...visited])); } catch(e) {}
+}
+async function loadVisited() {
+  try {
+    const r = await window.storage.get('bern-v3');
+    if (r && r.value) visited = new Set(JSON.parse(r.value));
+  } catch(e) {}
+}
+
+function initMap() {
+  map = L.map('map', { center:[46.9480,7.4474], zoom:15, zoomControl:false, attributionControl:false });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(map);
+  PLACES.forEach(p => addMarker(p));
+}
+
+function mkHTML(place, selected) {
+  const isVis = visited.has(place.id);
+  const cls = isVis ? 'visited' : (place.cost==='free' ? 'free' : 'paid');
+  const sel = selected ? ' selected' : '';
+  return `<div class="marker-wrap"><div class="marker-pin ${cls}${sel}"><span class="pin-icon">${place.icon}</span></div><div class="marker-tier ${place.tier}"></div></div>`;
+}
+
+function addMarker(place) {
+  const icon = L.divIcon({ className:'', html:mkHTML(place,false), iconSize:[40,52], iconAnchor:[20,52] });
+  const m = L.marker([place.lat,place.lng],{icon}).addTo(map).on('click',()=>openSheet(place.id));
+  markers[place.id] = m;
+}
+
+function refreshMarker(id) {
+  const place = PLACES.find(p=>p.id===id);
+  if (!place||!markers[id]) return;
+  markers[id].setIcon(L.divIcon({className:'',html:mkHTML(place,id===currentPlaceId),iconSize:[40,52],iconAnchor:[20,52]}));
+}
+
+function applyFilter() {
+  PLACES.forEach(place => {
+    const m = markers[place.id]; if (!m) return;
+    const tierOk = filterTier==='all' || place.tier===filterTier;
+    const costOk = filterCost==='all' || place.cost===filterCost;
+    const statusOk = filterStatus==='all'
+      || (filterStatus==='unseen' && !visited.has(place.id))
+      || (filterStatus==='visited' && visited.has(place.id));
+    if (tierOk && costOk && statusOk) m.addTo(map); else m.remove();
+  });
+}
+
+function checkSmartBanner() {
+  if (bannerDismissed) return;
+  const mustAll = PLACES.filter(p=>p.tier==='must');
+  const mustDone = mustAll.filter(p=>visited.has(p.id));
+  const recAll = PLACES.filter(p=>p.tier==='rec');
+  const recDone = recAll.filter(p=>visited.has(p.id));
+  const banner = document.getElementById('smart-banner');
+
+  if (mustDone.length===mustAll.length && mustAll.length>0) {
+    if (recDone.length < recAll.length) {
+      document.getElementById('b-title').textContent = '🎉 All Must-Sees complete!';
+      document.getElementById('b-sub').textContent = `${recAll.length-recDone.length} Recommended spots still to discover`;
+      banner.classList.add('show');
+    } else if (recDone.length===recAll.length) {
+      document.getElementById('b-title').textContent = '🏆 Explorer Level Unlocked!';
+      document.getElementById('b-sub').textContent = 'You\'ve seen every Must-See & Recommended spot!';
+      banner.classList.add('show');
+    }
+  } else {
+    banner.classList.remove('show');
+  }
+}
+
+function hideBanner() { bannerDismissed=true; document.getElementById('smart-banner').classList.remove('show'); }
+
+function openSheet(placeId) {
+  const place = PLACES.find(p=>p.id===placeId); if (!place) return;
+  if (currentPlaceId && currentPlaceId!==placeId) refreshMarker(currentPlaceId);
+  currentPlaceId = placeId; currentNavPlace = place;
+  map.panTo([place.lat,place.lng],{animate:true,duration:0.4});
+  refreshMarker(placeId);
+  const isVis=visited.has(placeId), isFree=place.cost==='free';
+  document.getElementById('s-icon').textContent=place.icon;
+  document.getElementById('s-icon-wrap').className='sheet-icon-wrap '+(isFree?'free':'paid');
+  document.getElementById('s-name').textContent=place.name;
+  document.getElementById('s-cat').textContent=catLabel(place.category);
+  const tb=document.getElementById('s-tier');
+  tb.className='tier-badge '+place.tier;
+  tb.textContent={must:'⭐ Must-See',rec:'👍 Recommended',good:'📍 Good'}[place.tier];
+  document.getElementById('s-rating').innerHTML='⭐ '+place.rating;
+  document.getElementById('s-cost').textContent=place.costDetail;
+  document.getElementById('s-cost').className='row-text '+(isFree?'cost-free':'cost-paid');
+  document.getElementById('s-hours').textContent=place.hours;
+  document.getElementById('s-addr').textContent=place.address;
+  document.getElementById('s-desc').textContent=place.desc;
+  updateVisitBtn(isVis);
+  document.getElementById('bottom-sheet').classList.add('open');
+}
+
+function closeSheet() {
+  document.getElementById('bottom-sheet').classList.remove('open');
+  if (currentPlaceId) { refreshMarker(currentPlaceId); currentPlaceId=null; }
+}
+
+function updateVisitBtn(isVis) {
+  document.getElementById('v-icon').textContent=isVis?'✓':'☐';
+  document.getElementById('v-label').textContent=isVis?'Visited! Tap to unmark':'Mark as Visited';
+  document.getElementById('visit-btn').className='visit-btn '+(isVis?'visited-state':'not-visited');
+}
+
+async function toggleVisited() {
+  if (!currentPlaceId) return;
+  const wasVis=visited.has(currentPlaceId);
+  if (wasVis) { visited.delete(currentPlaceId); showToast('Removed from visited'); }
+  else { visited.add(currentPlaceId); showToast('Marked as visited! ✓'); }
+  await saveVisited();
+  updateVisitBtn(!wasVis);
+  refreshMarker(currentPlaceId);
+  updateProgress(); renderList(); renderStats(); checkSmartBanner();
+}
+
+function openNavPicker() { document.getElementById('nav-picker').classList.add('open'); }
+function closeNavPicker() { document.getElementById('nav-picker').classList.remove('open'); }
+
+function navigateWith(app) {
+  if (!currentNavPlace) return;
+  const {lat,lng,name} = currentNavPlace;
+  const urls = {
+    apple: `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=w`,
+    google: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`,
+    waze: `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`,
+    swiss: `https://map.geo.admin.ch/?lang=en&E=${lng}&N=${lat}&zoom=14`
+  };
+  closeNavPicker();
+  if (urls[app]) window.open(urls[app],'_blank');
+}
+
+function setTier(v) {
+  filterTier=v;
+  document.querySelectorAll('.seg[class*="t-"]').forEach(s=>s.classList.remove('active'));
+  document.querySelector('.seg.t-'+v).classList.add('active');
+  applyFilter(); closeSheet();
+}
+function setCost(v) {
+  filterCost=v;
+  document.querySelectorAll('.seg[class*="c-"]').forEach(s=>s.classList.remove('active'));
+  document.querySelector('.seg.c-'+v).classList.add('active');
+  applyFilter(); closeSheet();
+}
+function setStatus(v) {
+  filterStatus=v;
+  document.querySelectorAll('.seg[class*="s-"]').forEach(s=>s.classList.remove('active'));
+  document.querySelector('.seg.s-'+v).classList.add('active');
+  applyFilter(); closeSheet();
+}
+
+function locateMe() {
+  if (!navigator.geolocation) { showToast('Geolocation not supported'); return; }
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const {latitude:lat,longitude:lng}=pos.coords;
+    if (userMarker) userMarker.remove();
+    userMarker=L.marker([lat,lng],{icon:L.divIcon({className:'',html:'<div class="user-loc-dot"></div>',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map);
+    map.flyTo([lat,lng],16,{animate:true,duration:1});
+    showToast('📍 Located!');
+  },()=>showToast('Unable to get location'));
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  document.getElementById('list-view').classList.toggle('open',tab==='list');
+  document.getElementById('stats-view').classList.toggle('open',tab==='stats');
+  if (tab==='list') renderList();
+  if (tab==='stats') renderStats();
+}
+
+function renderList() {
+  const c=document.getElementById('list-container'); c.innerHTML='';
+  const sections=[
+    {label:'⭐ Must-See · Not Visited', places:PLACES.filter(p=>p.tier==='must'&&!visited.has(p.id))},
+    {label:'👍 Recommended · Not Visited', places:PLACES.filter(p=>p.tier==='rec'&&!visited.has(p.id))},
+    {label:'📍 Good · Not Visited', places:PLACES.filter(p=>p.tier==='good'&&!visited.has(p.id))},
+    {label:'✓ Visited', places:PLACES.filter(p=>visited.has(p.id)).sort((a,b)=>b.rating-a.rating)},
+  ].filter(s=>s.places.length>0);
+  sections.forEach(sec=>{
+    const t=document.createElement('div'); t.className='list-section-title';
+    t.textContent=`${sec.label} (${sec.places.length})`; c.appendChild(t);
+    sec.places.forEach(p=>c.appendChild(mkListItem(p)));
+  });
+}
+
+function mkListItem(place) {
+  const isVis=visited.has(place.id), isFree=place.cost==='free';
+  const div=document.createElement('div'); div.className='list-item';
+  div.onclick=()=>{switchTab('map');setTimeout(()=>openSheet(place.id),350);};
+  div.innerHTML=`<div class="list-icon ${isVis?'vis-bg':(isFree?'free':'paid')}">${place.icon}<div class="list-tier-dot ${place.tier}"></div></div>
+    <div class="list-info"><div class="list-name">${place.name}</div>
+    <div class="list-meta"><span class="${isFree?'lc-free':'lc-paid'}">${isFree?'Free':'Paid'}</span><span>·</span><span>${catLabel(place.category)}</span><span>·</span><span>⭐ ${place.rating}</span></div></div>
+    <div class="list-check ${isVis?'done':''}">${isVis?'✓':''}</div>`;
+  return div;
+}
+
+function renderStats() {
+  const total=PLACES.length, v=visited.size, pct=total>0?Math.round(v/total*100):0;
+  const mustAll=PLACES.filter(p=>p.tier==='must'), recAll=PLACES.filter(p=>p.tier==='rec'), goodAll=PLACES.filter(p=>p.tier==='good');
+  const mustDone=mustAll.filter(p=>visited.has(p.id)), recDone=recAll.filter(p=>visited.has(p.id)), goodDone=goodAll.filter(p=>visited.has(p.id));
+  document.getElementById('st-pct').textContent=pct+'%';
+  document.getElementById('st-visited').textContent=v;
+  document.getElementById('st-remaining').textContent=total-v;
+  document.getElementById('st-free').textContent=PLACES.filter(p=>p.cost==='free').length;
+  document.getElementById('st-paid').textContent=PLACES.filter(p=>p.cost==='paid').length;
+  document.getElementById('tc-must-v').textContent=mustDone.length;
+  document.getElementById('tc-must-t').textContent=`/ ${mustAll.length} done`;
+  document.getElementById('tc-rec-v').textContent=recDone.length;
+  document.getElementById('tc-rec-t').textContent=`/ ${recAll.length} done`;
+  document.getElementById('tc-good-v').textContent=goodDone.length;
+  document.getElementById('tc-good-t').textContent=`/ ${goodAll.length} done`;
+  document.getElementById('circle-arc').style.strokeDashoffset=427.26-(pct/100)*427.26;
+  const tags=['Start your Bern adventure!','The journey begins…','You\'re exploring Bern!','Halfway there, explorer!','Almost a Bern master!','You\'ve mastered Bern! 🐻'];
+  document.getElementById('st-tagline').textContent=tags[Math.min(Math.floor(pct/20),5)];
+  const vList=document.getElementById('st-visited-list');
+  const vPlaces=PLACES.filter(p=>visited.has(p.id)).sort((a,b)=>b.rating-a.rating);
+  vList.innerHTML=vPlaces.length===0
+    ?'<div style="padding:20px;color:rgba(247,243,236,0.4);font-size:14px;font-style:italic">No places visited yet — get out there!</div>'
+    :vPlaces.map(p=>`<div class="stats-place-item"><span class="spi-icon">${p.icon}</span><span class="spi-name">${p.name}</span><span class="spi-badge">✓ Visited</span></div>`).join('');
+}
+
+function updateProgress() {
+  const total=PLACES.length, v=visited.size;
+  document.getElementById('visited-count').textContent=v;
+  document.getElementById('total-count').textContent=total;
+  document.getElementById('progress-bar').style.width=(total>0?v/total*100:0)+'%';
+}
+
+function catLabel(cat) { return{landmark:'Landmark',museum:'Museum',nature:'Nature & Parks'}[cat]||cat; }
+function showToast(msg) {
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+async function init() {
+  await loadVisited();
+  initMap();
+  updateProgress();
+  checkSmartBanner();
+  setTimeout(()=>{
+    document.getElementById('loading').classList.add('fade');
+    setTimeout(()=>document.getElementById('loading').remove(),600);
+  },1200);
+}
+init();
+</script>
+</body>
+</html>
